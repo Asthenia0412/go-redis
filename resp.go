@@ -58,6 +58,12 @@ func (r *RespReader) Read() (interface{}, error) {
 		return r.readArray()
 	case BULK:
 		return r.readBulk()
+	case STRING:
+		return r.readSimpleString()
+	case ERROR:
+		return r.readError()
+	case INTEGER:
+		return r.readInt()
 	default:
 		fmt.Printf("Unknown type: %v\n", typeByte)
 		return nil, nil
@@ -98,4 +104,31 @@ func (r *RespReader) readArray() ([]interface{}, error) {
 		res[i] = val
 	}
 	return res, nil
+}
+
+// readSimpleString 解析 +OK\r\n
+func (r *RespReader) readSimpleString() (string, error) {
+	line, err := r.readLine()
+	if err != nil {
+		return "", err
+	}
+	return string(line), nil
+}
+
+// readError 解析 -Err message\r\n
+func (r *RespReader) readError() (string, error) {
+	line, err := r.readLine()
+	if err != nil {
+		return "", err
+	}
+	return string(line), nil
+}
+
+// readInt 解析 :1000\r\n
+func (r *RespReader) readInt() (int64, error) {
+	line, err := r.readLine()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(string(line), 10, 64)
 }
