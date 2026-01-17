@@ -11,6 +11,13 @@ import (
 // 全局数据库实例
 var db = NewDB()
 
+const (
+	SET  = "SET"
+	GET  = "GET"
+	DEL  = "DEL"
+	PING = "PING"
+)
+
 func main() {
 	listener, err := net.Listen("tcp", ":6379")
 	if err != nil {
@@ -34,7 +41,7 @@ func main() {
 func handleClient(conn net.Conn) {
 	defer conn.Close()
 	reader := NewRespReader(conn)
-	writer := NewRespWriter(conn) // 初始化 Writer
+	writer := NewRespWriter(conn)
 
 	for {
 		value, err := reader.Read()
@@ -53,7 +60,7 @@ func handleClient(conn net.Conn) {
 		cmd := strings.ToUpper(args[0].(string))
 
 		switch cmd {
-		case "SET":
+		case SET:
 			if len(args) < 3 {
 				writer.WriteError("wrong number of arguments for 'set' command")
 				continue
@@ -62,7 +69,7 @@ func handleClient(conn net.Conn) {
 			writer.WriteSimpleString("OK")
 			log.Println(conn.RemoteAddr().String() + ":执行了Set操作:" + args[1].(string) + ":" + args[2].(string))
 
-		case "GET":
+		case GET:
 			val, ok := db.Get(args[1].(string))
 			if !ok {
 				writer.WriteBulk("") // 返回空值
@@ -71,15 +78,13 @@ func handleClient(conn net.Conn) {
 			}
 			log.Println(conn.RemoteAddr().String() + ":执行了Get操作:" + args[1].(string) + ":" + val)
 
-		case "DEL":
-			// 练习：实现 DEL 命令，返回删除的数量
+		case DEL:
 			key := args[1].(string)
-			// 需要在 db.go 增加 Delete 方法
 			count := db.Delete(key)
 			writer.WriteInteger(count)
 			log.Println(conn.RemoteAddr().String() + ":执行了DEL操作:" + args[1].(string) + ":")
 
-		case "PING":
+		case PING:
 			writer.WriteSimpleString("PONG")
 
 		default:
