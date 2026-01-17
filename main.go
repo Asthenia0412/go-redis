@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strings"
 )
@@ -22,6 +23,7 @@ func main() {
 
 	for {
 		conn, err := listener.Accept()
+		log.Println("检测到新的链接请求，地址来自" + conn.RemoteAddr().String())
 		if err != nil {
 			continue
 		}
@@ -58,6 +60,7 @@ func handleClient(conn net.Conn) {
 			}
 			db.Set(args[1].(string), args[2].(string))
 			writer.WriteSimpleString("OK")
+			log.Println(conn.RemoteAddr().String() + ":执行了Set操作:" + args[1].(string) + ":" + args[2].(string))
 
 		case "GET":
 			val, ok := db.Get(args[1].(string))
@@ -66,6 +69,7 @@ func handleClient(conn net.Conn) {
 			} else {
 				writer.WriteBulk(val)
 			}
+			log.Println(conn.RemoteAddr().String() + ":执行了Get操作:" + args[1].(string) + ":" + val)
 
 		case "DEL":
 			// 练习：实现 DEL 命令，返回删除的数量
@@ -73,6 +77,7 @@ func handleClient(conn net.Conn) {
 			// 需要在 db.go 增加 Delete 方法
 			count := db.Delete(key)
 			writer.WriteInteger(count)
+			log.Println(conn.RemoteAddr().String() + ":执行了DEL操作:" + args[1].(string) + ":")
 
 		case "PING":
 			writer.WriteSimpleString("PONG")

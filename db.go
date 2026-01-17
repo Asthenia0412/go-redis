@@ -29,6 +29,7 @@ func (db *DB) Get(key string) (string, bool) {
 
 func (db *DB) Delete(key string) int64 {
 	_, ok := db.data.Load(key)
+	db.data.Delete(key)
 	if ok {
 		return 1
 	}
