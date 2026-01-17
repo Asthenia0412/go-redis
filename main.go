@@ -32,6 +32,7 @@ func main() {
 func handleClient(conn net.Conn) {
 	defer conn.Close()
 	reader := NewRespReader(conn)
+	writer := NewRespWriter(conn) // 初始化 Writer
 
 	for {
 		value, err := reader.Read()
@@ -42,48 +43,42 @@ func handleClient(conn net.Conn) {
 			break
 		}
 
-		// 1. 类型断言：确保收到的是一个命令数组 []interface{}
 		args, ok := value.([]interface{})
 		if !ok || len(args) == 0 {
 			continue
 		}
 
-		// 2. 提取命令名称并转为大写 (不区分大小写，如 SET 或 set)
-		cmd, _ := args[0].(string)
-		cmd = strings.ToUpper(cmd)
+		cmd := strings.ToUpper(args[0].(string))
 
-		// 3. 处理业务逻辑
 		switch cmd {
 		case "SET":
-			if len(args) != 3 {
-				conn.Write([]byte("-ERR wrong number of arguments for 'set' command\r\n"))
+			if len(args) < 3 {
+				writer.WriteError("wrong number of arguments for 'set' command")
 				continue
 			}
-			key := args[1].(string)
-			val := args[2].(string)
-			db.Set(key, val)
-			conn.Write([]byte("+OK\r\n")) // 回复简单字符串
+			db.Set(args[1].(string), args[2].(string))
+			writer.WriteSimpleString("OK")
 
 		case "GET":
-			if len(args) != 2 {
-				conn.Write([]byte("-ERR wrong number of arguments for 'get' command\r\n"))
-				continue
-			}
-			key := args[1].(string)
-			val, ok := db.Get(key)
+			val, ok := db.Get(args[1].(string))
 			if !ok {
-				conn.Write([]byte("$-1\r\n")) // Redis 的空值 (Null Bulk String)
+				writer.WriteBulk("") // 返回空值
 			} else {
-				// 格式化为 Bulk String: $长度\r\n内容\r\n
-				resp := fmt.Sprintf("$%d\r\n%s\r\n", len(val), val)
-				conn.Write([]byte(resp))
+				writer.WriteBulk(val)
 			}
+
+		case "DEL":
+			// 练习：实现 DEL 命令，返回删除的数量
+			key := args[1].(string)
+			// 需要在 db.go 增加 Delete 方法
+			count := db.Delete(key)
+			writer.WriteInteger(count)
 
 		case "PING":
-			conn.Write([]byte("+PONG\r\n"))
+			writer.WriteSimpleString("PONG")
 
 		default:
-			conn.Write([]byte("-ERR unknown command\r\n"))
+			writer.WriteError("unknown command '" + cmd + "'")
 		}
 	}
 }

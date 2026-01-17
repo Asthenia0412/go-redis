@@ -26,3 +26,11 @@ func (db *DB) Get(key string) (string, bool) {
 	// 这里又是类型断言，把 any 转回 string
 	return val.(string), true
 }
+
+func (db *DB) Delete(key string) int64 {
+	_, ok := db.data.Load(key)
+	if ok {
+		return 1
+	}
+	return 0
+}
