@@ -1,94 +1,55 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net"
-	"strings"
-)
+	"os"
+	"os/signal"
+	"syscall"
 
-// 全局数据库实例
-var db = NewDB()
-
-const (
-	SET  = "SET"
-	GET  = "GET"
-	DEL  = "DEL"
-	PING = "PING"
+	"go-redis/server"
 )
 
 func main() {
-	listener, err := net.Listen("tcp", ":6379")
+	var (
+		addr    = flag.String("addr", ":6379", "Server address")
+		dbCount = flag.Int("databases", 16, "Number of databases")
+		aofFile = flag.String("aof", "appendonly.aof", "AOF file path (empty to disable)")
+	)
+	flag.Parse()
+
+	// 如果 AOF 文件路径为空，禁用 AOF
+	aof := *aofFile
+	if aof == "" {
+		aof = ""
+	}
+
+	// 创建服务器
+	srv, err := server.NewServer(*addr, *dbCount, aof)
 	if err != nil {
-		fmt.Println("启动失败:", err)
-		return
+		log.Fatalf("Failed to create server: %v", err)
 	}
-	defer listener.Close()
 
-	fmt.Println("Mini-Redis 运行中...")
+	// 处理信号
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	for {
-		conn, err := listener.Accept()
-		log.Println("检测到新的链接请求，地址来自" + conn.RemoteAddr().String())
-		if err != nil {
-			continue
-		}
-		go handleClient(conn)
+	go func() {
+		<-sigCh
+		fmt.Println("\nShutting down...")
+		srv.Stop()
+	}()
+
+	fmt.Printf("Go-Redis server starting on %s\n", *addr)
+	fmt.Printf("Databases: %d\n", *dbCount)
+	if aof != "" {
+		fmt.Printf("AOF file: %s\n", aof)
 	}
-}
+	fmt.Println("Press Ctrl+C to stop")
 
-func handleClient(conn net.Conn) {
-	defer conn.Close()
-	reader := NewRespReader(conn)
-	writer := NewRespWriter(conn)
-
-	for {
-		value, err := reader.Read()
-		if err != nil {
-			if err != io.EOF {
-				fmt.Println("读取错误:", err)
-			}
-			break
-		}
-
-		args, ok := value.([]interface{})
-		if !ok || len(args) == 0 {
-			continue
-		}
-
-		cmd := strings.ToUpper(args[0].(string))
-
-		switch cmd {
-		case SET:
-			if len(args) < 3 {
-				writer.WriteError("wrong number of arguments for 'set' command")
-				continue
-			}
-			db.Set(args[1].(string), args[2].(string))
-			writer.WriteSimpleString("OK")
-			log.Println(conn.RemoteAddr().String() + ":执行了Set操作:" + args[1].(string) + ":" + args[2].(string))
-
-		case GET:
-			val, ok := db.Get(args[1].(string))
-			if !ok {
-				writer.WriteBulk("") // 返回空值
-			} else {
-				writer.WriteBulk(val)
-			}
-			log.Println(conn.RemoteAddr().String() + ":执行了Get操作:" + args[1].(string) + ":" + val)
-
-		case DEL:
-			key := args[1].(string)
-			count := db.Delete(key)
-			writer.WriteInteger(count)
-			log.Println(conn.RemoteAddr().String() + ":执行了DEL操作:" + args[1].(string) + ":")
-
-		case PING:
-			writer.WriteSimpleString("PONG")
-
-		default:
-			writer.WriteError("unknown command '" + cmd + "'")
-		}
+	// 启动服务器
+	if err := srv.Start(); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
 }

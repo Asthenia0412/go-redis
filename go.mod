@@ -1,3 +1,3 @@
 module go-redis
 
-go 1.25
+go 1.21
